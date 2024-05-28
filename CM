@@ -1,0 +1,97 @@
+Map.addLayer(roi);
+Map.centerObject(roi, 8);
+
+var startDate = '2000-01-01';
+var endDate = '2005-01-12';
+
+// importing the chrolophyll data
+var chrolophyll = ee.ImageCollection("NASA/OCEANDATA/MODIS-Aqua/L3SMI")
+.select('chlor_a')
+.filterDate(startDate, endDate)
+.filterBounds(roi);
+Map.addLayer(chrolophyll.mean().clip(roi), imageVisParam,'Chrolophyll')
+
+//importing LST data
+var LST = ee.ImageCollection("MODIS/061/MOD11A2")
+.select('LST_Day_1km')
+.filterDate(startDate, endDate)
+.filterBounds(roi).map(
+  function(img){
+    return img.multiply(0.02).subtract(273.15)
+    .copyProperties(img,['system:time_start','system:time_end'])
+  })
+  
+Map.addLayer(LST.mean().clip(roi), imageVisParam2,'LST')
+
+// our function to extract the year and the month from each image 
+var byMonth = ee.ImageCollection.fromImages(
+  chrolophyll.aggregate_array('system:time_start')
+  .map(function(date){
+    return ee.Date(date);
+  })
+  .distinct()
+  .map(function (date){
+    date = ee.Date(date);
+    var filtered = chrolophyll.filter(ee.Filter.calendarRange(date.get('year'), date.get('year'),'year'))
+                              .filter(ee.Filter.calendarRange(date.get('month'), date.get('month'),'month'));
+    
+    return filtered.mean()
+                  .set('year', date.get('year'))
+                  .set('month', date.get('month'))
+                  .set('system:time_start', date.millis())
+                  .clip(roi)
+  })
+  
+  );
+  
+//lets generate the time series for chrolophyll concentration
+var timeSeriesChart = ui.Chart.image.series({
+  imageCollection : byMonth,
+  region : roi,
+  reducer : ee.Reducer.mean(),
+  scale : 500,
+}).setOptions({
+  title: "Monthly Average Chrolophyll Concentration over lake Victoria",
+  vAxis: {title:'Chrolophyll concentration (mg/m^3)'},
+  hAxis: {title:'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+});
+print(timeSeriesChart);
+
+
+
+// our function to extract the year and the month from each image 
+var byMonth = ee.ImageCollection.fromImages(
+  LST.aggregate_array('system:time_start')
+  .map(function(date){
+    return ee.Date(date);
+  })
+  .distinct()
+  .map(function (date){
+    date = ee.Date(date);
+    var filtered = LST.filter(ee.Filter.calendarRange(date.get('year'), date.get('year'),'year'))
+                              .filter(ee.Filter.calendarRange(date.get('month'), date.get('month'),'month'));
+    
+    return filtered.mean()
+                  .set('year', date.get('year'))
+                  .set('month', date.get('month'))
+                  .set('system:time_start', date.millis())
+                  .clip(roi)
+  })
+  );
+
+//lets generate the time series for LST concentration
+var timeSeriesChart_lst = ui.Chart.image.series({
+  imageCollection : byMonth,
+  region : roi,
+  reducer : ee.Reducer.mean(),
+  scale : 500,
+}).setOptions({
+  title: "Monthly Average LST Concentration over lake Victoria",
+  vAxis: {title:'LST (K)'},
+  hAxis: {title:'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+});
+print(timeSeriesChart_lst);
